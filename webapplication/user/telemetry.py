@@ -267,3 +267,23 @@ def build_unit_telemetry(camera, user, start, end, last_received_at, now):
         'totals': totals,
         'alerts': evaluate_unit_alerts(stream, last_received_at, now),
     }
+
+
+def build_unit_range_totals(camera, user, start, end):
+    """Totals for an arbitrary sub-range of a unit's already-fetched window."""
+    serial = camera.cam_serial_num
+    stream = fetch_stream(serial, user, start, end)
+    coverage_stream = [r for r in stream if r.source == 'coverage']
+
+    totals = _compute_totals(stream)
+    _, gap_minutes = _compute_buckets_and_gap(coverage_stream, start, end)
+    totals['gap_minutes'] = gap_minutes
+
+    located = [r for r in stream if r.location is not None]
+    if len(located) < 2:
+        totals['distance_km'] = 0.0
+    else:
+        distance_m, _ = _fetch_distance_and_simplified_track(serial, user, start, end)
+        totals['distance_km'] = round(distance_m / 1000, 1)
+
+    return totals

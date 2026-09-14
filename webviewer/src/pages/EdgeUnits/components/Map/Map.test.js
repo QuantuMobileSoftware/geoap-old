@@ -1,4 +1,4 @@
-import { getMapEmptyMessage } from './Map';
+import { getMapEmptyMessage, shouldRefit } from './Map';
 
 jest.mock('lodash-es', () => require('lodash'));
 
@@ -58,5 +58,48 @@ describe('getMapEmptyMessage', () => {
     });
 
     expect(message).toBe('No units match this filter.');
+  });
+});
+
+describe('shouldRefit', () => {
+  const lastFit = { dayKey: '2026-08-26|false', manualFitCount: 0 };
+
+  it('does not refit while the new day/window has no points yet', () => {
+    expect(
+      shouldRefit({ points: [], dayKey: '2026-08-27|false', manualFitCount: 0, lastFit })
+    ).toBe(false);
+  });
+
+  it('refits once points arrive for a day it has not fit yet', () => {
+    expect(
+      shouldRefit({
+        points: [[49.8, -98.3]],
+        dayKey: '2026-08-27|false',
+        manualFitCount: 0,
+        lastFit
+      })
+    ).toBe(true);
+  });
+
+  it('does not refit again for the same day on a poll refresh', () => {
+    expect(
+      shouldRefit({
+        points: [[49.8, -98.3]],
+        dayKey: lastFit.dayKey,
+        manualFitCount: lastFit.manualFitCount,
+        lastFit
+      })
+    ).toBe(false);
+  });
+
+  it('refits on a manual Fit track click even on the same day', () => {
+    expect(
+      shouldRefit({
+        points: [[49.8, -98.3]],
+        dayKey: lastFit.dayKey,
+        manualFitCount: lastFit.manualFitCount + 1,
+        lastFit
+      })
+    ).toBe(true);
   });
 });

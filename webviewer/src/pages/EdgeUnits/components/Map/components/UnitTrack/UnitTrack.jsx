@@ -23,6 +23,15 @@ export const formatPointTime = (t, timezone) =>
 
 export const filterImagePoints = track => track.filter(point => point.img);
 
+export const filterTrackByTimeRange = (track, timeRange) => {
+  if (!timeRange) return track;
+  return track.filter(point => {
+    if (!point.t) return false;
+    const ts = new Date(point.t).getTime();
+    return ts >= timeRange.start && ts < timeRange.end;
+  });
+};
+
 export const UnitTrack = ({
   unit,
   telemetryUnit,
@@ -31,10 +40,11 @@ export const UnitTrack = ({
   isSatellite,
   showImagePoints,
   timezone,
+  selectionTimeRange,
   onSelect
 }) => {
   const theme = useTheme();
-  const track = telemetryUnit?.track ?? [];
+  const track = filterTrackByTimeRange(telemetryUnit?.track ?? [], selectionTimeRange);
   const first = track[0];
   const last = track[track.length - 1];
 

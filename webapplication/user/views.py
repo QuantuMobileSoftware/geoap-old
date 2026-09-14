@@ -9,7 +9,7 @@ from django.conf import settings
 from django.contrib.auth.models import Group
 from django.http import Http404
 from django.utils import timezone as dj_timezone
-from django.utils.dateparse import parse_date
+from django.utils.dateparse import parse_date, parse_datetime
 from rest_framework import status
 from django.utils.translation import gettext_lazy as _
 from rest_framework.generics import ListAPIView, ListCreateAPIView, UpdateAPIView
@@ -27,7 +27,7 @@ from aoi.models import Component, Request
 from django.db.models import OuterRef, Q, Subquery
 from user.serializers import TransactionSerializer, UnitSerializer, UnitTelemetrySerializer, UserSerializer, UploadMissionsSerializer
 from user.stone_device_views import _gcs_client
-from user.telemetry import BUCKET_MINUTES, build_unit_telemetry
+from user.telemetry import BUCKET_MINUTES, build_unit_range_totals, build_unit_telemetry
 from user.upload_utils import get_upload_config
 from user.utils import day_window, rolling_window
 from waffle import switch_is_active
@@ -708,6 +708,31 @@ class UnitTelemetryAPIView(APIView):
                 )
             start, end = rolling_window()
 
+        range_from_param = request.query_params.get('range_from')
+        range_to_param = request.query_params.get('range_to')
+
+        if bool(range_from_param) != bool(range_to_param):
+            return Response(
+                {'detail': "'range_from' and 'range_to' must be provided together."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        range_start, range_end = None, None
+        if range_from_param:
+            range_start = parse_datetime(range_from_param)
+            range_end = parse_datetime(range_to_param)
+            if range_start is None or range_end is None or dj_timezone.is_naive(range_start) \
+                    or dj_timezone.is_naive(range_end):
+                return Response(
+                    {'detail': "'range_from' and 'range_to' must be timezone-aware ISO 8601 datetimes."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if range_start >= range_end or range_start < start or range_end > end:
+                return Response(
+                    {'detail': "'range_from'/'range_to' must be a non-empty sub-range within the resolved window."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         latest_coverage_subquery = (
             EdgeCoverage.objects
             .filter(serial=OuterRef('cam_serial_num'), chunk__user=request.user)
@@ -726,11 +751,16 @@ class UnitTelemetryAPIView(APIView):
             if not cameras.exists():
                 raise Http404
 
+        cameras = list(cameras)
         now = dj_timezone.now()
         units = [
             build_unit_telemetry(camera, request.user, start, end, camera.latest_coverage_created_at, now)
             for camera in cameras
         ]
+
+        if range_start is not None:
+            for camera, unit in zip(cameras, units):
+                unit['totals'] = build_unit_range_totals(camera, request.user, range_start, range_end)
 
         return Response({
             'timezone': request.user.timezone,
