@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import { useMap } from 'react-leaflet';
 import { formatAccountDay } from 'utils';
 import { SatelliteTileLayer, TILE_MODES } from 'components/Map/SatelliteTileLayer';
-import { UnitTrack } from './components';
+import { UnitTrack, filterTrackByTimeRange } from './components';
 import { TrackMarkerGlobalStyle } from './components/UnitTrack/UnitTrack.styles';
 import {
   MapHolder,
@@ -32,17 +32,27 @@ export const getMapEmptyMessage = ({
       )}. Pick another day, or check that the units were powered on.`;
 };
 
-// Only refits on fitTrigger (day/rolling/manual click), not on poll refreshes.
-const MapController = ({ points, fitTrigger }) => {
+// Switching days often re-renders before the new day's telemetry has loaded
+// (points still empty/stale), so we can't just refit when dayKey changes -
+// wait for points too, but only actually refit once dayKey or manualFitCount
+// differs from the last time we did (never on a poll refresh of the same day).
+export const shouldRefit = ({ points, dayKey, manualFitCount, lastFit }) => {
+  if (!points.length) return false;
+  return dayKey !== lastFit.dayKey || manualFitCount !== lastFit.manualFitCount;
+};
+
+const MapController = ({ points, dayKey, manualFitCount }) => {
   const map = useMap();
+  const lastFitRef = useRef({ dayKey: null, manualFitCount });
 
   useEffect(() => {
-    if (!points.length) return;
-    // Re-measure in case the container size was stale on mount.
+    if (!shouldRefit({ points, dayKey, manualFitCount, lastFit: lastFitRef.current }))
+      return;
+
     map.invalidateSize();
     map.fitBounds(L.latLngBounds(points).pad(0.3));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fitTrigger]);
+    lastFitRef.current = { dayKey, manualFitCount };
+  }, [points, dayKey, manualFitCount, map]);
 
   return null;
 };
@@ -55,7 +65,8 @@ export const UnitsMap = ({
   onSelectUnit,
   timezone,
   resolvedDay,
-  rolling
+  rolling,
+  selectionTimeRange
 }) => {
   const [baseMode, setBaseMode] = useState(TILE_MODES.SATELLITE);
   const [showImagePoints, setShowImagePoints] = useState(false);
@@ -66,19 +77,24 @@ export const UnitsMap = ({
     [telemetryUnits]
   );
 
-  const unitsWithTrack = units.filter(
-    unit => telemetryByUnitId.get(unit.unit_id)?.track?.length
-  );
+  const trackForUnit = unit =>
+    filterTrackByTimeRange(
+      telemetryByUnitId.get(unit.unit_id)?.track ?? [],
+      selectionTimeRange
+    );
+
+  const unitsWithTrack = units.filter(unit => trackForUnit(unit).length);
 
   const allPoints = useMemo(
     () =>
       unitsWithTrack.flatMap(unit =>
-        telemetryByUnitId.get(unit.unit_id).track.map(point => [point.lat, point.lng])
+        trackForUnit(unit).map(point => [point.lat, point.lng])
       ),
-    [unitsWithTrack, telemetryByUnitId]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [unitsWithTrack, telemetryByUnitId, selectionTimeRange]
   );
 
-  const fitTrigger = `${resolvedDay}|${rolling}|${manualFitCount}`;
+  const dayKey = `${resolvedDay}|${rolling}`;
   const isSatellite = baseMode === TILE_MODES.SATELLITE;
 
   const emptyMessage = getMapEmptyMessage({
@@ -93,7 +109,11 @@ export const UnitsMap = ({
       <TrackMarkerGlobalStyle />
       <StyledMapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} scrollWheelZoom>
         <SatelliteTileLayer mode={baseMode} />
-        <MapController points={allPoints} fitTrigger={fitTrigger} />
+        <MapController
+          points={allPoints}
+          dayKey={dayKey}
+          manualFitCount={manualFitCount}
+        />
         {unitsWithTrack.map(unit => (
           <UnitTrack
             key={unit.unit_id}
@@ -104,6 +124,7 @@ export const UnitsMap = ({
             isSatellite={isSatellite}
             showImagePoints={showImagePoints}
             timezone={timezone}
+            selectionTimeRange={selectionTimeRange}
             onSelect={onSelectUnit}
           />
         ))}

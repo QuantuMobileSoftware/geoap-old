@@ -3297,6 +3297,101 @@ class UnitTelemetryAPIViewTestCase(APITestCase):
         self.assertLessEqual(len(unit['track']), 1500)
         self.assertEqual(unit['totals']['messages'], n)  # totals computed pre-decimation
 
+    # -- range totals --------------------------------------
+
+    def test_range_totals_narrow_to_the_requested_sub_range(self):
+        chunk = self._make_chunk(self.user)
+        EdgeCoverage.objects.create(
+            uuid='tel-range-a', chunk=chunk, serial='TEL-100',
+            captured_at=datetime(2026, 6, 1, 6, 0, tzinfo=timezone.utc),
+            location=Point(-98.0, 50.0, srid=4326), image_path=None,
+        )
+        EdgeCoverage.objects.create(
+            uuid='tel-range-b', chunk=chunk, serial='TEL-100',
+            captured_at=datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc),
+            location=Point(-98.0, 50.1, srid=4326), image_path='shot.jpg',
+        )
+        EdgeCoverage.objects.create(
+            uuid='tel-range-c', chunk=chunk, serial='TEL-100',
+            captured_at=datetime(2026, 6, 1, 18, 0, tzinfo=timezone.utc),
+            location=Point(-98.0, 50.2, srid=4326), image_path=None,
+        )
+
+        response = self._get(
+            day='2026-06-01',
+            range_from='2026-06-01T11:00:00Z',
+            range_to='2026-06-01T13:00:00Z',
+        )
+
+        self.assertEqual(response.status_code, HTTP_200_OK)
+        unit = response.data['units'][0]
+        self.assertEqual(unit['totals']['messages'], 1)
+        self.assertEqual(unit['totals']['images'], 1)
+        self.assertEqual(self._iso(unit['totals']['first_at']), datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc))
+        self.assertEqual(self._iso(unit['totals']['last_at']), datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc))
+        # buckets/track stay full-window - only totals narrow.
+        self.assertEqual(len(unit['buckets']), 96)
+
+    def test_range_totals_full_window_matches_unscoped_totals(self):
+        chunk = self._make_chunk(self.user)
+        EdgeCoverage.objects.create(
+            uuid='tel-range-full-a', chunk=chunk, serial='TEL-100',
+            captured_at=datetime(2026, 6, 1, 7, 0, tzinfo=timezone.utc),
+            location=Point(-98.0, 50.0, srid=4326), image_path=None,
+        )
+        EdgeCoverage.objects.create(
+            uuid='tel-range-full-b', chunk=chunk, serial='TEL-100',
+            captured_at=datetime(2026, 6, 1, 7, 45, tzinfo=timezone.utc),
+            location=Point(-98.0, 50.1, srid=4326), image_path=None,
+        )
+
+        plain = self._get(day='2026-06-01')
+        scoped = self._get(
+            day='2026-06-01',
+            range_from='2026-06-01T06:00:00Z',
+            range_to='2026-06-02T06:00:00Z',
+        )
+
+        self.assertEqual(plain.data['units'][0]['totals'], scoped.data['units'][0]['totals'])
+
+    def test_range_totals_with_fewer_than_two_points_has_zero_distance(self):
+        chunk = self._make_chunk(self.user)
+        EdgeCoverage.objects.create(
+            uuid='tel-range-solo', chunk=chunk, serial='TEL-100',
+            captured_at=datetime(2026, 6, 1, 7, 0, tzinfo=timezone.utc),
+            location=Point(-98.0, 50.0, srid=4326), image_path=None,
+        )
+        response = self._get(
+            day='2026-06-01',
+            range_from='2026-06-01T06:00:00Z',
+            range_to='2026-06-01T08:00:00Z',
+        )
+        self.assertEqual(response.data['units'][0]['totals']['distance_km'], 0.0)
+
+    def test_range_only_one_param_returns_400(self):
+        response = self._get(day='2026-06-01', range_from='2026-06-01T06:00:00Z')
+        self.assertEqual(response.status_code, HTTP_400_BAD_REQUEST)
+
+    def test_range_malformed_datetime_returns_400(self):
+        response = self._get(day='2026-06-01', range_from='not-a-time', range_to='2026-06-01T08:00:00Z')
+        self.assertEqual(response.status_code, HTTP_400_BAD_REQUEST)
+
+    def test_range_naive_datetime_returns_400(self):
+        response = self._get(day='2026-06-01', range_from='2026-06-01T06:00:00', range_to='2026-06-01T08:00:00')
+        self.assertEqual(response.status_code, HTTP_400_BAD_REQUEST)
+
+    def test_range_end_before_start_returns_400(self):
+        response = self._get(
+            day='2026-06-01', range_from='2026-06-01T08:00:00Z', range_to='2026-06-01T06:00:00Z',
+        )
+        self.assertEqual(response.status_code, HTTP_400_BAD_REQUEST)
+
+    def test_range_outside_resolved_window_returns_400(self):
+        response = self._get(
+            day='2026-06-01', range_from='2026-05-30T00:00:00Z', range_to='2026-05-31T00:00:00Z',
+        )
+        self.assertEqual(response.status_code, HTTP_400_BAD_REQUEST)
+
     # -- empty state -----------------------------------------------------
 
     def test_unit_with_no_telemetry_still_appears_with_zeroed_totals(self):

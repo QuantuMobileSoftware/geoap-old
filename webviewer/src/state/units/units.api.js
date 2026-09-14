@@ -20,9 +20,15 @@ export const unitsApi = createApi({
       query: () => ({ url: '/units' })
     }),
     getUnitsTelemetry: build.query({
-      query: ({ day, rolling, unitId } = {}) => ({
+      query: ({ day, rolling, unitId, rangeFrom, rangeTo } = {}) => ({
         url: '/units/telemetry',
-        params: { day, rolling: rolling || undefined, unit_id: unitId }
+        params: {
+          day,
+          rolling: rolling || undefined,
+          unit_id: unitId,
+          range_from: rangeFrom,
+          range_to: rangeTo
+        }
       })
     })
   })

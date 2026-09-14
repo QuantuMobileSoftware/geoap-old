@@ -12,7 +12,11 @@ import {
   FilterChips,
   DayBar,
   UnitCards,
-  UnitsMap
+  UnitsMap,
+  TimelineChart,
+  bucketRangeToTimeRange,
+  isTimeRangeWithinWindow,
+  SummaryRow
 } from './components';
 import {
   PageContainer,
@@ -51,10 +55,14 @@ export const EdgeUnits = () => {
   const [rolling, setRolling] = useState(true);
   const [stateFilter, setStateFilter] = useState('all');
   const [selectedUnitId, setSelectedUnitId] = useState(null);
+  const [selectionRange, setSelectionRange] = useState(null);
+  const [committedSelectionRange, setCommittedSelectionRange] = useState(null);
+  const [committedSelectionContext, setCommittedSelectionContext] = useState(null);
 
   const resolvedDay = day ?? today;
   const windowArgs = rolling ? { rolling: true } : { day: resolvedDay };
   const isLiveWindow = rolling || resolvedDay === today;
+  const selectionContext = `${resolvedDay}|${rolling}|${selectedUnitId}`;
 
   const {
     data: unitsData,
@@ -96,6 +104,64 @@ export const EdgeUnits = () => {
     if (visibleUnits.some(unit => unit.unit_id === selectedUnitId)) return;
     setSelectedUnitId(visibleUnits[0]?.unit_id ?? null);
   }, [visibleUnits, selectedUnitId]);
+
+  useEffect(() => {
+    setSelectionRange(null);
+    setCommittedSelectionRange(null);
+    setCommittedSelectionContext(null);
+  }, [resolvedDay, rolling, selectedUnitId, telemetryData?.from, telemetryData?.to]);
+
+  const selectionTimeRange = useMemo(
+    () =>
+      bucketRangeToTimeRange(selectionRange, {
+        from: telemetryData?.from,
+        bucketMinutes: telemetryData?.bucket_minutes
+      }),
+    [selectionRange, telemetryData?.from, telemetryData?.bucket_minutes]
+  );
+
+  const committedTimeRange = useMemo(
+    () =>
+      bucketRangeToTimeRange(committedSelectionRange, {
+        from: telemetryData?.from,
+        bucketMinutes: telemetryData?.bucket_minutes
+      }),
+    [committedSelectionRange, telemetryData?.from, telemetryData?.bucket_minutes]
+  );
+
+  // telemetryData lags a render behind day/rolling/unit switches, so it
+  // can't catch those alone - selectionContext catches the switch, the
+  // time-range check catches rolling mode's own poll drift.
+  const isCommittedRangeValid =
+    committedSelectionRange != null &&
+    committedSelectionContext === selectionContext &&
+    isTimeRangeWithinWindow(committedTimeRange, telemetryData?.from, telemetryData?.to);
+
+  const { data: rangeTelemetryData } = useGetUnitsTelemetryQuery(
+    {
+      ...windowArgs,
+      unitId: selectedUnitId,
+      rangeFrom: isCommittedRangeValid
+        ? new Date(committedTimeRange.start).toISOString()
+        : undefined,
+      rangeTo: isCommittedRangeValid
+        ? new Date(committedTimeRange.end).toISOString()
+        : undefined
+    },
+    { skip: !isCommittedRangeValid || !selectedUnitId }
+  );
+
+  const selectedTelemetryUnit = telemetryData?.units?.find(
+    unit => unit.unit_id === selectedUnitId
+  );
+  const summaryTotals = isCommittedRangeValid
+    ? rangeTelemetryData?.units?.[0]?.totals
+    : selectedTelemetryUnit?.totals;
+
+  const handleSelectionCommit = range => {
+    setCommittedSelectionRange(range);
+    setCommittedSelectionContext(selectionContext);
+  };
 
   const handleRetryOverview = () => {
     refetchUnits();
@@ -211,6 +277,7 @@ export const EdgeUnits = () => {
               timezone={timezone}
               resolvedDay={resolvedDay}
               rolling={rolling}
+              selectionTimeRange={selectionTimeRange}
             />
           </Section>
         </MapArea>
@@ -221,7 +288,19 @@ export const EdgeUnits = () => {
             onRetry={refetchTelemetry}
             skeleton={<Skeleton />}
           >
-            {/* FE-09/FE-10/FE-11: timeline strip, brushing, summary row */}
+            <TimelineChart
+              telemetryUnits={telemetryData?.units}
+              selectedUnitId={selectedUnitId}
+              from={telemetryData?.from}
+              to={telemetryData?.to}
+              bucketMinutes={telemetryData?.bucket_minutes}
+              timezone={timezone}
+              rolling={rolling}
+              selectionRange={selectionRange}
+              onSelectionChange={setSelectionRange}
+              onSelectionCommit={handleSelectionCommit}
+            />
+            <SummaryRow totals={summaryTotals} timezone={timezone} />
           </Section>
         </TimelineStrip>
         <DetailPanel data-testid='detail-panel'>
