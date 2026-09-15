@@ -1,7 +1,6 @@
 import styled, { css } from 'styled-components';
 import { em, rem } from 'styles';
 
-
 export const Column = styled.div`
   display: flex;
   flex-direction: column;
