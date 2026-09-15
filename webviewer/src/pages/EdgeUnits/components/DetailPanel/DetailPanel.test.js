@@ -30,22 +30,37 @@ const withTheme = children => (
 );
 
 describe('cameraTileValue', () => {
+  const totals = { messages: 5 };
+
   it('is "No images" and warns when the no_images alert is present', () => {
-    expect(cameraTileValue([alert('no_images'), alert('late', 'medium')])).toEqual({
-      value: 'No images',
-      warn: true
-    });
+    expect(
+      cameraTileValue([alert('no_images'), alert('late', 'medium')], totals)
+    ).toEqual({ value: 'No images', warn: true });
   });
 
   it('is "Working" when no_images is absent', () => {
-    expect(cameraTileValue([alert('ok', 'ok')])).toEqual({
+    expect(cameraTileValue([alert('ok', 'ok')], totals)).toEqual({
       value: 'Working',
       warn: false
     });
   });
 
   it('is "Working" when there are no alerts at all', () => {
-    expect(cameraTileValue(undefined)).toEqual({ value: 'Working', warn: false });
+    expect(cameraTileValue(undefined, totals)).toEqual({
+      value: 'Working',
+      warn: false
+    });
+  });
+
+  it('is "No data" when the window has zero messages, even with no alert', () => {
+    expect(cameraTileValue([alert('not_reporting')], { messages: 0 })).toEqual({
+      value: 'No data',
+      warn: false
+    });
+  });
+
+  it('is "No data" when totals is missing entirely', () => {
+    expect(cameraTileValue([], undefined)).toEqual({ value: 'No data', warn: false });
   });
 });
 
