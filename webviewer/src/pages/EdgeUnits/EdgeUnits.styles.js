@@ -68,7 +68,7 @@ export const CardsSkeletonRow = styled.div`
   width: 100%;
 `;
 
-export const NoUnitsMessage = styled.p`
+export const PageMessage = styled.p`
   ${({ theme }) => css`
     margin: ${em(40)} 0;
     text-align: center;

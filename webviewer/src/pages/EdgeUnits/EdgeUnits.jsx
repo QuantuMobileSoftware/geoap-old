@@ -34,7 +34,7 @@ import {
   TimelineStrip,
   DetailPanelSection,
   CardsSkeletonRow,
-  NoUnitsMessage,
+  PageMessage,
   RetryRow
 } from './EdgeUnits.styles';
 
@@ -42,9 +42,13 @@ const POLLING_INTERVAL_MS = 30000;
 const IMAGE_POLLING_INTERVAL_MS = 5 * 60 * 1000;
 const MIN_UNITS_FOR_CHIPS = 6;
 const NO_UNITS_MESSAGE = 'No units are linked to this account yet.';
+const INVALID_TIMEZONE_MESSAGE =
+  "There's a problem with this account's timezone setting. Contact us to get it fixed.";
 
 export const hasNoUnits = (unitsData, isUnitsLoading, isUnitsError) =>
   !isUnitsLoading && !isUnitsError && (unitsData?.units?.length ?? 0) === 0;
+
+export const hasInvalidTimezone = timezone => !timezone;
 
 const Section = ({ isLoading, isError, onRetry, skeleton, children }) => {
   if (isLoading) return skeleton;
@@ -220,13 +224,25 @@ export const EdgeUnits = () => {
 
   const handleToggleRolling = () => setRolling(value => !value);
 
+  if (hasInvalidTimezone(timezone)) {
+    return (
+      <div>
+        <PageHeader />
+        <PageContainer>
+          <AccountHeader />
+          <PageMessage>{INVALID_TIMEZONE_MESSAGE}</PageMessage>
+        </PageContainer>
+      </div>
+    );
+  }
+
   if (hasNoUnits(unitsData, isUnitsLoading, isUnitsError)) {
     return (
       <div>
         <PageHeader />
         <PageContainer>
           <AccountHeader />
-          <NoUnitsMessage>{NO_UNITS_MESSAGE}</NoUnitsMessage>
+          <PageMessage>{NO_UNITS_MESSAGE}</PageMessage>
         </PageContainer>
       </div>
     );
