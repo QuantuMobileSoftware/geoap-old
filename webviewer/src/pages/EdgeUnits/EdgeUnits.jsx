@@ -3,7 +3,12 @@ import { useSelector } from 'react-redux';
 import { Header as PageHeader } from 'components/Header';
 import { Skeleton } from 'components/_shared/Skeleton';
 import { Button } from 'components/_shared/Button';
-import { useGetUnitsQuery, useGetUnitsTelemetryQuery, selectUserTimezone } from 'state';
+import {
+  useGetUnitsQuery,
+  useGetUnitsTelemetryQuery,
+  useGetUnitLatestImageUrlQuery,
+  selectUserTimezone
+} from 'state';
 import { useFleetStatus } from 'hooks';
 import { getAccountToday, shiftDate } from 'utils';
 import {
@@ -16,7 +21,8 @@ import {
   TimelineChart,
   bucketRangeToTimeRange,
   isTimeRangeWithinWindow,
-  SummaryRow
+  SummaryRow,
+  DetailPanel
 } from './components';
 import {
   PageContainer,
@@ -26,12 +32,13 @@ import {
   UnitCardsStrip,
   MapArea,
   TimelineStrip,
-  DetailPanel,
+  DetailPanelSection,
   CardsSkeletonRow,
   RetryRow
 } from './EdgeUnits.styles';
 
 const POLLING_INTERVAL_MS = 30000;
+const IMAGE_POLLING_INTERVAL_MS = 5 * 60 * 1000;
 const MIN_UNITS_FOR_CHIPS = 6;
 
 const Section = ({ isLoading, isError, onRetry, skeleton, children }) => {
@@ -151,12 +158,29 @@ export const EdgeUnits = () => {
     { skip: !isCommittedRangeValid || !selectedUnitId }
   );
 
+  const {
+    data: latestImage,
+    isLoading: isLatestImageLoading,
+    error: latestImageError,
+    refetch: refetchLatestImage
+  } = useGetUnitLatestImageUrlQuery(
+    { unitId: selectedUnitId },
+    {
+      skip: !selectedUnitId,
+      pollingInterval: isLiveWindow ? IMAGE_POLLING_INTERVAL_MS : 0
+    }
+  );
+
+  const selectedUnit = visibleUnits.find(unit => unit.unit_id === selectedUnitId);
   const selectedTelemetryUnit = telemetryData?.units?.find(
     unit => unit.unit_id === selectedUnitId
   );
   const summaryTotals = isCommittedRangeValid
     ? rangeTelemetryData?.units?.[0]?.totals
     : selectedTelemetryUnit?.totals;
+  const activityTrack = isCommittedRangeValid
+    ? rangeTelemetryData?.units?.[0]?.track
+    : selectedTelemetryUnit?.track;
 
   const handleSelectionCommit = range => {
     setCommittedSelectionRange(range);
@@ -303,16 +327,26 @@ export const EdgeUnits = () => {
             <SummaryRow totals={summaryTotals} timezone={timezone} />
           </Section>
         </TimelineStrip>
-        <DetailPanel data-testid='detail-panel'>
+        <DetailPanelSection data-testid='detail-panel'>
           <Section
             isLoading={isTelemetryLoading}
             isError={isTelemetryError}
             onRetry={refetchTelemetry}
             skeleton={<Skeleton />}
           >
-            {/* FE-12/FE-13: detail panel, latest image */}
+            <DetailPanel
+              unit={selectedUnit}
+              telemetryUnit={selectedTelemetryUnit}
+              activityTrack={activityTrack}
+              state={fleetStatus.stateByUnitId[selectedUnitId]}
+              timezone={timezone}
+              latestImage={latestImage}
+              isLatestImageLoading={isLatestImageLoading}
+              latestImageError={latestImageError}
+              onRetryLatestImage={refetchLatestImage}
+            />
           </Section>
-        </DetailPanel>
+        </DetailPanelSection>
       </PageContainer>
     </div>
   );

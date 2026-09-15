@@ -6,3 +6,4 @@ export * from './UnitCards';
 export * from './Map';
 export * from './TimelineStrip';
 export * from './SummaryRow';
+export * from './DetailPanel';

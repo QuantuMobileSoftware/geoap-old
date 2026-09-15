@@ -51,8 +51,7 @@ export const TimelineStrip = styled.section`
   min-height: ${em(140)};
 `;
 
-export const DetailPanel = styled.section`
-  ${placeholderRegion}
+export const DetailPanelSection = styled.section`
   display: grid;
   grid-template-columns: 2fr 1fr;
   gap: ${em(16)};
