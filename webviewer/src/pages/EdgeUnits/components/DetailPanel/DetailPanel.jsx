@@ -37,7 +37,8 @@ const SEVERITY_TO_STATE = {
   high: 'silent'
 };
 
-export const cameraTileValue = alerts => {
+export const cameraTileValue = (alerts, totals) => {
+  if (!totals?.messages) return { value: 'No data', warn: false };
   const noImages = (alerts ?? []).some(alert => alert.rule === 'no_images');
   return { value: noImages ? 'No images' : 'Working', warn: noImages };
 };
@@ -81,7 +82,7 @@ export const DetailPanel = ({
   }
 
   const alerts = telemetryUnit?.alerts ?? [];
-  const camera = cameraTileValue(alerts);
+  const camera = cameraTileValue(alerts, telemetryUnit?.totals);
   const entries = activityLogEntries(activityTrack, timezone);
 
   const handleImageError = () => {
