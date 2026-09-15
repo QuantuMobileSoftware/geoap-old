@@ -68,6 +68,15 @@ export const CardsSkeletonRow = styled.div`
   width: 100%;
 `;
 
+export const NoUnitsMessage = styled.p`
+  ${({ theme }) => css`
+    margin: ${em(40)} 0;
+    text-align: center;
+    font-size: ${rem(14)};
+    color: ${theme.colors.nature.n3};
+  `}
+`;
+
 export const RetryRow = styled.div`
   ${({ theme }) => css`
     display: flex;

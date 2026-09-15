@@ -34,12 +34,17 @@ import {
   TimelineStrip,
   DetailPanelSection,
   CardsSkeletonRow,
+  NoUnitsMessage,
   RetryRow
 } from './EdgeUnits.styles';
 
 const POLLING_INTERVAL_MS = 30000;
 const IMAGE_POLLING_INTERVAL_MS = 5 * 60 * 1000;
 const MIN_UNITS_FOR_CHIPS = 6;
+const NO_UNITS_MESSAGE = 'No units are linked to this account yet.';
+
+export const hasNoUnits = (unitsData, isUnitsLoading, isUnitsError) =>
+  !isUnitsLoading && !isUnitsError && (unitsData?.units?.length ?? 0) === 0;
 
 const Section = ({ isLoading, isError, onRetry, skeleton, children }) => {
   if (isLoading) return skeleton;
@@ -214,6 +219,18 @@ export const EdgeUnits = () => {
   };
 
   const handleToggleRolling = () => setRolling(value => !value);
+
+  if (hasNoUnits(unitsData, isUnitsLoading, isUnitsError)) {
+    return (
+      <div>
+        <PageHeader />
+        <PageContainer>
+          <AccountHeader />
+          <NoUnitsMessage>{NO_UNITS_MESSAGE}</NoUnitsMessage>
+        </PageContainer>
+      </div>
+    );
+  }
 
   return (
     <div>
